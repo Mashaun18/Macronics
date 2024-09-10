@@ -112,15 +112,16 @@ WSGI_APPLICATION = 'macronics.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# Get the database URL from the environment variable
+# Get the database URL from environment variable
 database_url = os.environ.get('DATABASE_URL')
 
-# Parse the database URL and set the default database
 if database_url:
+    # Parse the database URL
     DATABASES = {
-        'default': dj_database_url.parse(database_url)
+        'default': dj_database_url.parse(database_url, conn_max_age=600)
     }
 else:
+    # Fallback to SQLite if DATABASE_URL is not set
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
