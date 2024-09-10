@@ -11,7 +11,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
-
+from decouple import config
+import os, dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -105,8 +106,7 @@ SIMPLE_JWT = {
 
 WSGI_APPLICATION = 'macronics.wsgi.application'
 
-from decouple import config
-import os, dj_database_url
+
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -120,8 +120,6 @@ DATABASES = {
 
 database_url = os.environ.get('DATABASE_URL')
 DATABASES['default'] = dj_database_url.parse(database_url)
-
-#postgresql://macronics_django_render_user:doNBQZnPsnBHV3Rfk3KPTgKuxrDGbfr7@dpg-crg2sljqf0us73dfqepg-a.oregon-postgres.render.com/macronics_django_render
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
