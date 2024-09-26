@@ -11,6 +11,7 @@ from .serializers import PaymentSerializer
 from orders.models import Order
 from .paystack import Paystack
 import uuid
+
 # Create your views here.
 
 class PaymentViewSet(viewsets.ModelViewSet):
@@ -74,10 +75,10 @@ def initialize_payment(request):
         }
 
         payload = {
-            'amount': int(float(amount) * 100),
+            'amount': int(float(amount) * 100),  # Convert to kobo
             'email': email,
             'reference': f'{order_id}-{uuid.uuid4().hex}',
-            'callback_url': 'https://your-site.com/payment/callback/'
+            'callback_url': 'https://macronics.onrender.com/payment/callback/'  # Updated with your render domain
         }
 
         response = requests.post(f'{Paystack.BASE_URL}/transaction/initialize', headers=headers, json=payload)
@@ -87,5 +88,29 @@ def initialize_payment(request):
             return Response(data)
         else:
             return Response(response.json(), status=response.status_code)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def payment_callback(request):
+    reference = request.GET.get('reference')
+    if not reference:
+        return Response({'error': 'No reference provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Verify payment using Paystack
+        paystack = Paystack()
+        payment_data = paystack.verify_payment(reference)
+
+        if payment_data:
+            # Update order/payment status
+            order_id = payment_data['data']['metadata']['order_id']
+            order = Order.objects.get(id=order_id)
+            order.status = 'paid'
+            order.save()
+
+            return Response({'status': 'success', 'message': 'Payment verified successfully'})
+        else:
+            return Response({'status': 'failed', 'message': 'Payment verification failed'})
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
