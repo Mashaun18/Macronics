@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import viewsets
 from .models import Order
@@ -28,3 +29,21 @@ class OrderViewSet(viewsets.ModelViewSet):
             return Response({'message': 'Order status updated successfully'})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+        
+
+@api_view(['GET'])
+def cart_details(request):
+    user = request.user
+    cart = Order.objects.filter(user=user, status='cart').first()  # Assuming status 'cart' indicates a cart
+    if cart:
+        serializer = OrderSerializer(cart)
+        return Response(serializer.data)
+    return Response({'message': 'No active cart'}, status=404)        
+
+
+@api_view(['GET'])
+def order_history(request):
+    user = request.user
+    orders = Order.objects.filter(user=user).exclude(status='cart')  # Exclude cart status to show completed orders
+    serializer = OrderSerializer(orders, many=True)
+    return Response(serializer.data)

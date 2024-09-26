@@ -11,6 +11,9 @@ from customers import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from rest_framework.exceptions import ValidationError
+from rest_framework.decorators import api_view
+from orders.models import Order
+from orders.serializers import OrderSerializer
 # Create your views here. 
 
 
@@ -31,12 +34,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise ValidationError({"detail": "Invalid credentials"})
         if not user.is_active:
             raise ValidationError({"detail": "User account is disabled."})
-        
+
         refresh = RefreshToken.for_user(user)
         data = {
             'refresh': str(refresh),
             'access': str(refresh.access_token),
-            'user_type': user.user_type
+            'user_type': user.user_type,
+            'user': UserSerializer(user).data  # Include user profile data
         }
 
         return data
@@ -57,6 +61,35 @@ class UserSignupView(generics.CreateAPIView):
     queryset = Userr.objects.all()
     serializer_class = UserSignupSerializer
     permission_classes = [AllowAny]
+
+@api_view(['GET'])
+def user_profile(request):
+    user = request.user
+    serializer = UserSerializer(user)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def user_dashboard(request):
+    user = request.user
+    
+    # User Profile
+    user_serializer = UserSerializer(user)
+    
+    # Cart details (assuming "status='cart'" means it's the active cart)
+    cart = Order.objects.filter(user=user, status='cart').first()
+    cart_serializer = OrderSerializer(cart) if cart else None
+    
+    # Order history (exclude cart status)
+    orders = Order.objects.filter(user=user).exclude(status='cart')
+    orders_serializer = OrderSerializer(orders, many=True)
+
+    data = {
+        'user_profile': user_serializer.data,
+        'cart_details': cart_serializer.data if cart else None,
+        'order_history': orders_serializer.data
+    }
+    
+    return Response(data)
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = Userr.objects.all()
