@@ -17,9 +17,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # Automatically associate the order with the current user
-        order = serializer.save(user=self.request.user)
+        order = serializer.save(user=self.request.user)  # Save the order with the user
         # Add additional logic here if needed, e.g., sending notifications
-        return Response({'message': 'Order created successfully.', 'order_id': order.id}, status=status.HTTP_201_CREATED)
+        return Response({'message': 'Order created successfully.', 'order': OrderSerializer(order).data}, status=status.HTTP_201_CREATED)
 
     def update_order_status(self, request, pk, status):
         try:
