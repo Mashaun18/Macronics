@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Order, OrderItem, Product, User
+from .models import Order, OrderItem, Product
 from django.core.exceptions import ObjectDoesNotExist
 
 class OrderItemSerializer(serializers.ModelSerializer):
