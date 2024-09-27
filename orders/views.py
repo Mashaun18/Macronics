@@ -5,7 +5,6 @@ from rest_framework import viewsets, status
 from .models import Order
 from .serializers import OrderSerializer
 
-# Create your views here.
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
 
@@ -17,18 +16,23 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # Automatically associate the order with the current user
-        order = serializer.save(user=self.request.user)  # Save the order with the user
+        serializer.save(user=self.request.user)  # Save the order with the user
         # Add additional logic here if needed, e.g., sending notifications
-        return Response({'message': 'Order created successfully.', 'order': OrderSerializer(order).data}, status=status.HTTP_201_CREATED)
 
-    def update_order_status(self, request, pk, status):
-        try:
-            order = self.get_object()
+@api_view(['PATCH'])
+def update_order_status(request, pk):
+    try:
+        order = Order.objects.get(pk=pk)
+        status = request.data.get('status')
+        if status:
             order.status = status
             order.save()
             return Response({'message': 'Order status updated successfully'}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'No status provided'}, status=status.HTTP_400_BAD_REQUEST)
+    except Order.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 def cart_details(request):
