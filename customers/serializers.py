@@ -28,12 +28,24 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    user_data = serializers.SerializerMethodField()
+
     class Meta:
         model = Userr
-        fields = ['id', 'username', 'email', 'user_type', 'first_name', 'last_name', 'is_active']
+        fields = ['id', 'username', 'email', 'user_type', 'first_name', 'last_name', 'is_active', 'user_data']
+
+    def get_user_data(self, obj):
+        user = obj
+        return {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'user_type': user.user_type,
+        }
 
 class UserSignupSerializer(serializers.ModelSerializer):
     user_type = serializers.ChoiceField(choices=UserRole.choices)
+    user = serializers.CharField()
 
     class Meta:
         model = Userr
@@ -51,6 +63,15 @@ class UserSignupSerializer(serializers.ModelSerializer):
             last_name=validated_data['last_name']
         )
         return user
+
+    def validate_user(self, value):
+        try:
+            if value.isdigit():
+                return Userr.objects.get(pk=value)  # Fetch user by primary key
+            else:
+                return Userr.objects.get(username=value)  # Fetch user by username
+        except Userr.DoesNotExist:
+            raise serializers.ValidationError("User does not exist.")
 
     def validate_password(self, value):
         if len(value) < 8:
@@ -73,4 +94,3 @@ class UserSignupSerializer(serializers.ModelSerializer):
         if Userr.objects.filter(username=value).exists():
             raise serializers.ValidationError('Username already exists')
         return value
-    
