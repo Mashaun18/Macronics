@@ -4,12 +4,65 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import get_object_or_404
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    # Change product to a CharField to allow both string and int inputs (ID, name, or slug)
     product = serializers.CharField()
 
     class Meta:
         model = OrderItem
         fields = '__all__'
+
+    def to_internal_value(self, data):
+        """
+        Convert the product data (ID, name, or slug) to a Product object.
+        """
+        internal_data = super().to_internal_value(data)
+        product_data = internal_data.get('product')
+
+        # Use the get_product_from_data method to resolve the product object
+        product = self.get_product_from_data(product_data)
+
+        if not product:
+            raise serializers.ValidationError(f"Product with identifier '{product_data}' does not exist.")
+        
+        internal_data['product'] = product
+        return internal_data
+
+    def to_representation(self, instance):
+        """
+        Convert the Product object back to a string representation.
+        """
+        rep = super().to_representation(instance)
+        # Return the product name (or slug or ID based on your needs)
+        rep['product'] = instance.product.name  # or 'instance.product.slug' or 'instance.product.id'
+        return rep
+
+    def get_product_from_data(self, product_data):
+        """
+        This method checks if the incoming product data is either a pk, name, or slug.
+        """
+        try:
+            # Handle lookup by primary key (int)
+            if isinstance(product_data, str) and product_data.isdigit():
+                product = Product.objects.filter(pk=int(product_data)).first()
+                if not product:
+                    raise serializers.ValidationError(f"Product with ID '{product_data}' does not exist.")
+                return product
+                
+            # Handle lookup by unique product name
+            elif isinstance(product_data, str):
+                products = Product.objects.filter(name=product_data)
+                if products.count() == 1:
+                    return products.first()
+                # Handle lookup by unique slug
+                products = Product.objects.filter(slug=product_data)
+                if products.count() == 1:
+                    return products.first()
+            
+            raise serializers.ValidationError(f"Multiple or no products found with name/slug '{product_data}'")
+
+        except ValueError:
+            raise serializers.ValidationError(f"Invalid product identifier '{product_data}'. It should be an integer, name, or slug.")
+
+        return None
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
