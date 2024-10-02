@@ -4,7 +4,7 @@ from .models import Order, OrderItem, Product
 from django.db import transaction
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    product = serializers.CharField()  # Product identifier
+    product = serializers.CharField()
 
     class Meta:
         model = OrderItem
