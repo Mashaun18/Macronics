@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from .models import Order, OrderItem, Product
 from django.db import transaction
@@ -26,7 +27,11 @@ class CreateOrderSerializer(serializers.Serializer):
 
             order_items = []
             for item in self.validated_data['items']:
-                product = Product.objects.get(pk=item['product'])  # Assuming product is passed as ID
+                product_identifier = item['product']
+                product = get_object_or_404(Product, pk=product_identifier) or \
+                          get_object_or_404(Product, name=product_identifier) or \
+                          get_object_or_404(Product, slug=product_identifier)
+            
                 order_item = OrderItem(
                     order=order,
                     product=product,
