@@ -1,3 +1,4 @@
+from collections import defaultdict
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from .models import Order, OrderItem, Product
@@ -18,25 +19,36 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ['id', 'created_at', 'status', 'user', 'items', 'shipping_address', 'tracking_number']
 
 class CreateOrderSerializer(serializers.Serializer):
-    items = serializers.ListField(write_only=True)  # Items will be passed during order creation
+    items = serializers.ListField(write_only=True)
 
     def save(self, **kwargs):
         with transaction.atomic():
             user = self.context["user"]
             order = Order.objects.create(user=user, status=Order.PENDING_STATUS)
 
-            order_items = []
+            # Aggregate items
+            aggregated_items = defaultdict(lambda: {'quantity': 0, 'product_id': None})
             for item in self.validated_data['items']:
                 product_identifier = item['product']
                 product = get_object_or_404(Product, pk=product_identifier) or \
                           get_object_or_404(Product, name=product_identifier) or \
                           get_object_or_404(Product, slug=product_identifier)
-            
+
+                # Update aggregated data
+                aggregated_items[product.id]['quantity'] += item['quantity']
+                aggregated_items[product.id]['product_id'] = product.id
+
+            # Create order items from aggregated data
+            order_items = []
+            for product_id, data in aggregated_items.items():
+                quantity = data['quantity']
+                product = get_object_or_404(Product, id=product_id)
                 order_item = OrderItem(
                     order=order,
                     product=product,
-                    quantity=item['quantity'],
-                    unit_price=product.price
+                    quantity=quantity,
+                    unit_price=product.price,
+                    subtotal=product.price * quantity  # Set subtotal directly
                 )
                 order_items.append(order_item)
 
