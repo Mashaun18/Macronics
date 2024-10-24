@@ -1,5 +1,4 @@
-from requests import Response
-from rest_framework import serializers, status
+from rest_framework import serializers
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import Userr
 from django.core.validators import EmailValidator
@@ -15,14 +14,11 @@ class UserRole(models.TextChoices):
 class CustomTokenObtainPairView(TokenObtainPairView):
     def validate(self, attrs):
         data = super().validate(attrs)
-        print("Validated Data:", data)
         user = self.user
         if not user.is_active:
-            print("User is inactive")
             raise serializers.ValidationError({"detail": "User account is disabled."})
         if not user.user_type or user.user_type not in [role.value for role in UserRole]:
-            print("Invalid user type")
-            raise serializers.ValidationError({"detail": "User does not have a valid role"})
+            raise serializers.ValidationError({"detail": "User does not have a valid role."})
         data['user_type'] = user.user_type
         return data
 
@@ -43,6 +39,7 @@ class UserSerializer(serializers.ModelSerializer):
             'user_type': user.user_type,
         }
 
+
 class UserSignupSerializer(serializers.ModelSerializer):
     user_type = serializers.ChoiceField(choices=UserRole.choices)
 
@@ -52,7 +49,6 @@ class UserSignupSerializer(serializers.ModelSerializer):
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
-        print(validated_data)
         user = Userr.objects.create_user(
             username=validated_data['username'],
             password=validated_data['password'],
@@ -62,15 +58,6 @@ class UserSignupSerializer(serializers.ModelSerializer):
             last_name=validated_data['last_name']
         )
         return user
-
-    def validate_user(self, value):
-        try:
-            if value.isdigit():
-                return Userr.objects.get(pk=value)  # Fetch user by primary key
-            else:
-                return Userr.objects.get(username=value)  # Fetch user by username
-        except Userr.DoesNotExist:
-            raise serializers.ValidationError("User does not exist.")
 
     def validate_password(self, value):
         if len(value) < 8:
