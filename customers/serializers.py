@@ -45,7 +45,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserSignupSerializer(serializers.ModelSerializer):
     user_type = serializers.ChoiceField(choices=UserRole.choices)
-    user = serializers.CharField()
 
     class Meta:
         model = Userr
