@@ -25,14 +25,10 @@ class ProductViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, identifier=None):
         """Handles GET request for a single product by ID, name, or slug."""
         try:
-            # Check if identifier is an integer (ID)
             if identifier.isdigit():
                 product = self.queryset.get(pk=int(identifier))
             else:
-                # Check if the identifier is a slug or name
-                product = self.queryset.filter(slug=identifier).first()
-                if not product:  # If not found by slug, try by name
-                    product = self.queryset.filter(name=identifier).first()
+                product = self.queryset.filter(slug=identifier).first() or self.queryset.filter(name=identifier).first()
 
             if product:
                 serializer = self.serializer_class(product)
@@ -45,22 +41,20 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def create(self, request):
         """Handles POST request to create a new product."""
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.serializer_class(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            # Associate the product with the vendor
+            serializer.save(vendor=request.user.vendor)
             return Response({"message": "Product created successfully"}, status=status.HTTP_201_CREATED)
         return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, identifier=None):
         """Handles PUT request to update an existing product."""
         try:
-            # Retrieve product based on identifier
             if identifier.isdigit():
                 product = self.queryset.get(pk=int(identifier))
             else:
-                product = self.queryset.filter(slug=identifier).first()
-                if not product:
-                    product = self.queryset.filter(name=identifier).first()
+                product = self.queryset.filter(slug=identifier).first() or self.queryset.filter(name=identifier).first()
 
             if product:
                 serializer = self.serializer_class(product, data=request.data)
@@ -77,13 +71,10 @@ class ProductViewSet(viewsets.ModelViewSet):
     def destroy(self, request, identifier=None):
         """Handles DELETE request to delete a product."""
         try:
-            # Retrieve product based on identifier
             if identifier.isdigit():
                 product = self.queryset.get(pk=int(identifier))
             else:
-                product = self.queryset.filter(slug=identifier).first()
-                if not product:
-                    product = self.queryset.filter(name=identifier).first()
+                product = self.queryset.filter(slug=identifier).first() or self.queryset.filter(name=identifier).first()
 
             if product:
                 product.delete()
