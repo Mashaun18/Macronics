@@ -61,14 +61,13 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
 
 # In production, use the following instead:
 
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5173",
-#     "https://macronics.onrender.com",
-# ]
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "https://macronics.onrender.com",
+]
 
 CORS_ALLOW_CREDENTIALS = True
 
