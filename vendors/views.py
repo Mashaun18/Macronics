@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
+from customers.models import UserRole
 from .models import Vendor
 from .serializers import VendorSerializer
 
@@ -13,6 +14,6 @@ class VendorViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'vendor':
+        if user.user_type == UserRole.VENDOR:
             return Vendor.objects.filter(user=user)
         return Vendor.objects.all()
