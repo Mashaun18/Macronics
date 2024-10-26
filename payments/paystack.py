@@ -18,23 +18,23 @@ class Paystack:
 
         try:
             response = requests.get(url, headers=headers)
-
-            # Log the raw response for debugging
             logger.info("Raw Paystack Response: %s (type: %s)", response.text, type(response.text))
 
-            response_data = response.json()
+            if response.text:
+                response_data = response.json()
+            else:
+                logger.error("Empty response from Paystack.")
+                return None
             
-            # Log the Paystack response for debugging
             logger.info("Paystack Response Data: %s (type: %s)", response_data, type(response_data))
 
-            # Check if the response is valid and has a 'data' field
             if response.status_code == 200 and isinstance(response_data, dict):
                 if response_data.get('data', {}).get('status') == 'success':
                     if amount and response_data['data']['amount'] == amount:
                         return response_data
                     return response_data
                 else:
-                    logger.error("Verification failed: %s", response_data.get('message'))
+                    logger.error("Verification failed: %s", response_data.get('message', 'Unknown error'))
                     return None
             else:
                 logger.error("Invalid response from Paystack: %s", response_data)
@@ -47,6 +47,7 @@ class Paystack:
         except Exception as e:
             logger.error("An error occurred: %s", str(e))
             return None
+
 
 
 

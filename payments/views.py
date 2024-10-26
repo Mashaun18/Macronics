@@ -28,16 +28,11 @@ class VerifyPaymentView(APIView):
             return Response({'detail': 'Reference and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Instantiate the Paystack class
             paystack = Paystack()
-
-            # Verify the payment using the instantiated paystack object
             payment_data = paystack.verify_payment(reference, amount)
 
-            # Log the payment data for debugging
             logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
 
-            # Check if payment_data is a dictionary before accessing its contents
             if isinstance(payment_data, dict) and payment_data.get('status', False):
                 metadata = payment_data['data'].get('metadata', {})
                 order_id = metadata.get('order_id')
@@ -58,15 +53,11 @@ class VerifyPaymentView(APIView):
 
                 return Response({'status': 'success', 'data': payment_data})
             else:
+                logger.error("Verification failed: %s", payment_data)
                 return Response({'status': 'failed', 'detail': 'Paystack verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error("Error during payment verification: %s", str(e))
+            logger.error("Error during payment verification: %s (type: %s)", str(e), type(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
-
-
 
 
 @api_view(['POST'])
