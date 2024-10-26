@@ -37,13 +37,20 @@ class VerifyPaymentView(APIView):
 
         if payment_data.get('status') == 'success':
             data = payment_data['data']
-            order_id = data.get('metadata', {}).get('order_id')
+            
+            # Check if metadata exists and contains the order_id
+            metadata = data.get('metadata', {})
+            if isinstance(metadata, str):
+                metadata = {}
 
-            if order_id is None:
-                logger.error("Order ID not found in payment metadata.")
-                return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, 
-                                status=status.HTTP_400_BAD_REQUEST)
+            order_id = metadata.get('order_id')
 
+            # Log a warning if order_id is missing, and handle the case
+            if not order_id:
+                logger.warning("Order ID is missing in payment metadata. Proceeding without updating the order.")
+                # If your application allows payments without order linkage, continue processing
+                return Response({'status': 'success', 'data': payment_data})
+            
             try:
                 order = get_object_or_404(Order, id=order_id)
                 order.status = 'paid'
@@ -66,6 +73,7 @@ class VerifyPaymentView(APIView):
         logger.error("Verification failed: %s", payment_data)
         return Response({'status': 'failed', 'detail': payment_data.get('message', 'Unknown error occurred.')}, 
                         status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
