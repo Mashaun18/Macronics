@@ -32,17 +32,21 @@ class VerifyPaymentView(APIView):
             paystack = Paystack()
             
             # Verify the payment using the instantiated paystack object
-            payment_data = paystack.verify_payment(reference)
+            payment_data = paystack.verify_payment(reference, amount)
 
-            if payment_data and payment_data.get('status') and payment_data['data']['status'] == 'success':
-                logger.info("Payment verification successful.")
-                
-                # Log the response for debugging
-                print("Payment data from Paystack:", payment_data)
-                
-                # Update order status and create new payment record
-                order_id = payment_data['data']['metadata']['order_id']
-                order = get_object_or_404(Order, id=order_id)
+            if payment_data and payment_data['status']:
+                # Log the payment data for debugging
+                logger.info("Payment data from Paystack: %s", payment_data)
+
+                # Safely extract order_id
+                metadata = payment_data['data'].get('metadata', {})
+                order_id = metadata.get('order_id')
+
+                if order_id is None:
+                    return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                # If order_id is found, proceed to update order status
+                order = Order.objects.get(id=order_id)
                 order.status = 'paid'
                 order.save()
 
@@ -54,13 +58,12 @@ class VerifyPaymentView(APIView):
                 )
 
                 return Response({'status': 'success', 'data': payment_data})
-
-            logger.warning("Payment verification failed or status not success.")
-            return Response({'status': 'failed', 'detail': 'Paystack verification failed or payment status is not successful.'}, status=status.HTTP_400_BAD_REQUEST)
-
+            else:
+                return Response({'status': 'failed', 'detail': 'Paystack verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error during payment verification: {str(e)}")
+            logger.error("Error during payment verification: %s", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
