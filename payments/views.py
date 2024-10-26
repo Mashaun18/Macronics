@@ -32,15 +32,17 @@ class VerifyPaymentView(APIView):
             paystack = Paystack()
             
             # Verify the payment using the instantiated paystack object
-            payment_data = paystack.verify_payment(reference, amount)
+            payment_data = paystack.verify_payment(reference)
 
-            if payment_data:
+            if payment_data and payment_data.get('status') and payment_data['data']['status'] == 'success':
+                logger.info("Payment verification successful.")
+                
                 # Log the response for debugging
                 print("Payment data from Paystack:", payment_data)
                 
                 # Update order status and create new payment record
                 order_id = payment_data['data']['metadata']['order_id']
-                order = Order.objects.get(id=order_id)
+                order = get_object_or_404(Order, id=order_id)
                 order.status = 'paid'
                 order.save()
 
@@ -52,11 +54,13 @@ class VerifyPaymentView(APIView):
                 )
 
                 return Response({'status': 'success', 'data': payment_data})
-            else:
-                return Response({'status': 'failed', 'detail': 'Paystack verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+            logger.warning("Payment verification failed or status not success.")
+            return Response({'status': 'failed', 'detail': 'Paystack verification failed or payment status is not successful.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            logger.error(f"Error during payment verification: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 

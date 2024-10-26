@@ -15,31 +15,34 @@ class Paystack:
             'Authorization': f'Bearer {self.SECRET_KEY}',
             'Content-Type': 'application/json',
         }
-        
+
         try:
             response = requests.get(url, headers=headers)
             response_data = response.json()
 
             # Log the Paystack response for debugging
-            print("Paystack Response Data:", response_data)
+            logger.info("Paystack Response Data: %s", response_data)
 
             # Check if the response is valid and has a 'data' field
             if response.status_code == 200 and 'data' in response_data:
                 if response_data['data']['status'] == 'success':
-                    if amount and response_data['data']['amount'] == amount:
+                    if amount is not None and response_data['data']['amount'] == amount:
                         return response_data
                     return response_data
+                else:
+                    logger.warning("Payment verification failed: %s", response_data.get('message', 'Unknown error'))
             else:
+                logger.error("Invalid response from Paystack: %s", response_data)
                 return None
 
-        except ValueError:
-            # Handle JSON decoding errors
-            print(f"Error decoding JSON response: {response.text}")
+        except requests.exceptions.RequestException as e:
+            logger.error("Request to Paystack failed: %s", str(e))
             return None
-
+        except ValueError as ve:
+            logger.error("Error decoding JSON response: %s", str(ve))
+            return None
         except Exception as e:
-            # Catch any other exceptions
-            print(f"An error occurred: {str(e)}")
+            logger.error("An unexpected error occurred: %s", str(e))
             return None
 
 
