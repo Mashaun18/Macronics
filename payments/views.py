@@ -31,14 +31,16 @@ class VerifyPaymentView(APIView):
             paystack = Paystack()
             payment_data = paystack.verify_payment(reference, amount)
 
-            # Log raw payment_data
-            logger.info("Raw Paystack Response: %s (type: %s)", payment_data, type(payment_data))
+            # Log the type of payment_data immediately after fetching it
+            logger.info("Type of payment_data before any processing: %s", type(payment_data))
+
+            # Existing logging and processing...
+
 
             # Check if payment_data is a string and try to parse it
             if isinstance(payment_data, str):
                 try:
                     payment_data = json.loads(payment_data)
-                    logger.info("Parsed payment data: %s (type: %s)", payment_data, type(payment_data))
                 except json.JSONDecodeError:
                     logger.error("Paystack returned an invalid JSON string: %s", payment_data)
                     return Response({'status': 'failed', 'detail': 'Invalid response from Paystack.'}, 
@@ -47,19 +49,26 @@ class VerifyPaymentView(APIView):
             logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
 
             # Check if payment_data is a dict and contains expected fields
-            if isinstance(payment_data, dict) and payment_data.get('status', False):
+            if isinstance(payment_data, dict):
+                if not payment_data.get('status', False):
+                    logger.error("Verification failed: %s", payment_data)
+                    return Response({'status': 'failed', 'detail': payment_data.get('message', 'Paystack verification failed.')}, 
+                                    status=status.HTTP_400_BAD_REQUEST)
+
                 data = payment_data.get('data', {})
                 if not isinstance(data, dict):
                     logger.error("Data is not a dictionary: %s (type: %s)", data, type(data))
                     return Response({'status': 'failed', 'detail': 'Invalid response structure.'}, 
                                     status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+                # Handle metadata extraction
                 metadata = data.get('metadata', {})
                 order_id = metadata.get('order_id')
 
                 if order_id is None:
                     return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, 
                                     status=status.HTTP_400_BAD_REQUEST)
+
 
                 order = get_object_or_404(Order, id=order_id)
                 order.status = 'paid'
@@ -115,20 +124,22 @@ def initialize_payment(request):
             'amount': int(float(amount) * 100),  # Convert to kobo
             'email': email,
             'reference': reference,
-            'callback_url': 'https://macronics.onrender.com/api/payments/callback/'  # Updated with your render domain
+            'callback_url': 'https://macronics.onrender.com/api/payments/callback/'
         }
 
         response = requests.post(f'{Paystack.BASE_URL}/transaction/initialize', headers=headers, json=payload)
 
         if response.status_code == 200:
             data = response.json()
-            return Response(data)
+            # Consider including order_id in the response
+            return Response({'data': data, 'order_id': order_id})
         else:
             logger.error(f"Error initializing payment: {response.json()}")
             return Response({'error': response.json().get('message', 'Error initializing payment')}, status=response.status_code)
     except Exception as e:
         logger.error(f"Error initializing payment: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET'])
 def payment_callback(request):
