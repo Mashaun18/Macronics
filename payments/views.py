@@ -24,6 +24,7 @@ class VerifyPaymentView(APIView):
         reference = request.query_params.get('reference')
         amount = request.query_params.get('amount')
 
+        # Validate input parameters
         if not reference or not amount:
             return Response({'detail': 'Reference and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -32,6 +33,7 @@ class VerifyPaymentView(APIView):
 
         logger.info(f"Payment data from Paystack for reference {reference}: {payment_data}")
 
+        # Check if the payment verification was successful
         if payment_data.get('status') == 'success':
             data = payment_data['data']
             metadata = data.get('metadata', {})
@@ -45,6 +47,7 @@ class VerifyPaymentView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             try:
+                # Fetch the order based on order_id
                 order = get_object_or_404(Order, id=order_id)
                 order.status = 'paid'
                 order.save()
@@ -57,7 +60,7 @@ class VerifyPaymentView(APIView):
                     status='success'
                 )
 
-                return Response({'status': 'success', 'data': payment_data})
+                return Response({'status': 'success', 'data': payment_data}, status=status.HTTP_200_OK)
 
             except Order.DoesNotExist:
                 logger.error(f"Order with ID {order_id} not found.")
@@ -73,6 +76,7 @@ class VerifyPaymentView(APIView):
                     'detail': 'Error processing order.'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # Log and return failure if payment verification was not successful
         logger.error(f"Payment verification failed for reference {reference}: {payment_data}")
         return Response({
             'status': 'failed', 
