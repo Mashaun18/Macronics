@@ -30,24 +30,24 @@ class Paystack:
                         # Compare the amount as integers
                         if amount and int(amount) == response_data['data']['amount']:
                             return response_data  # Return the full data on success
-                        return {'status': False, 'message': 'Amount does not match.'}  # Return an error if amounts don't match
+                        return {'status': False, 'message': 'Amount does not match.'}
                     else:
                         logger.error("Verification failed: %s", response_data.get('message', 'Unknown error'))
-                        return {'status': False, 'message': response_data.get('message', 'Verification failed')}  # Return an error dict
+                        return {'status': False, 'message': response_data.get('message', 'Verification failed')}
                 else:
                     logger.error("Invalid response structure: %s", response_data)
-                    return {'status': False, 'message': 'Invalid response structure'}  # Return error for invalid structure
+                    return {'status': False, 'message': 'Invalid response structure'}
             else:
                 logger.error("Invalid response from Paystack: %s", response.json())
-                return {'status': False, 'message': 'Invalid response from Paystack'}  # Return error for non-200 response
+                return {'status': False, 'message': 'Invalid response from Paystack'}
 
         except ValueError as ve:
             logger.error("Error decoding JSON response: %s", str(ve))
-            return {'status': False, 'message': 'Error decoding JSON response'}  # Return error for JSON decoding issues
+            return {'status': False, 'message': 'Error decoding JSON response'}
 
         except Exception as e:
             logger.error("An error occurred: %s", str(e))
-            return {'status': False, 'message': 'An error occurred during verification'}  # Return error for general exceptions
+            return {'status': False, 'message': 'An error occurred during verification'}
 
 
 

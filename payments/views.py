@@ -1,10 +1,10 @@
 import json
+from django.conf import settings
 import requests
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-from django.conf import settings
 from django.shortcuts import get_object_or_404
 from .models import Payment
 from .serializers import PaymentSerializer
@@ -31,24 +31,7 @@ class VerifyPaymentView(APIView):
             paystack = Paystack()
             payment_data = paystack.verify_payment(reference, amount)
 
-            # Log the type of payment_data immediately after fetching it
-            logger.info("Type of payment_data before any processing: %s", type(payment_data))
-
-            # Existing logging and processing...
-
-
-            # Check if payment_data is a string and try to parse it
-            if isinstance(payment_data, str):
-                try:
-                    payment_data = json.loads(payment_data)
-                except json.JSONDecodeError:
-                    logger.error("Paystack returned an invalid JSON string: %s", payment_data)
-                    return Response({'status': 'failed', 'detail': 'Invalid response from Paystack.'}, 
-                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
-
-            # Check if payment_data is a dict and contains expected fields
+            # Check if payment_data is a dictionary
             if isinstance(payment_data, dict):
                 if not payment_data.get('status', False):
                     logger.error("Verification failed: %s", payment_data)
@@ -69,7 +52,6 @@ class VerifyPaymentView(APIView):
                     return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, 
                                     status=status.HTTP_400_BAD_REQUEST)
 
-
                 order = get_object_or_404(Order, id=order_id)
                 order.status = 'paid'
                 order.save()
@@ -83,14 +65,13 @@ class VerifyPaymentView(APIView):
 
                 return Response({'status': 'success', 'data': payment_data})
             else:
-                logger.error("Verification failed: %s", payment_data)
-                return Response({'status': 'failed', 'detail': payment_data.get('message', 'Paystack verification failed.')}, 
+                logger.error("Verification failed, payment_data is not a dict: %s", payment_data)
+                return Response({'status': 'failed', 'detail': 'Unexpected response from Paystack.'}, 
                                 status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
-            logger.error("Error during payment verification: %s (type: %s)", str(e), type(e))
+            logger.error("Error during payment verification: %s", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 @api_view(['POST'])
@@ -131,7 +112,6 @@ def initialize_payment(request):
 
         if response.status_code == 200:
             data = response.json()
-            # Consider including order_id in the response
             return Response({'data': data, 'order_id': order_id})
         else:
             logger.error(f"Error initializing payment: {response.json()}")
@@ -152,7 +132,7 @@ def payment_callback(request):
         paystack = Paystack()
         payment_data = paystack.verify_payment(reference)
 
-        if payment_data and isinstance(payment_data, dict) and payment_data.get('status'):
+        if isinstance(payment_data, dict) and payment_data.get('status'):
             order_id = payment_data['data']['metadata']['order_id']
             order = get_object_or_404(Order, id=order_id)
             order.status = 'paid'
