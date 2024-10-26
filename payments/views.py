@@ -30,6 +30,12 @@ class VerifyPaymentView(APIView):
             paystack = Paystack()
             payment_data = paystack.verify_payment(reference, amount)
 
+            # Check if payment_data is a dictionary
+            if isinstance(payment_data, str):
+                logger.error("Paystack returned a string instead of a dict: %s", payment_data)
+                return Response({'status': 'failed', 'detail': 'Invalid response from Paystack.'}, 
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
 
             # Handle the response
@@ -38,7 +44,8 @@ class VerifyPaymentView(APIView):
                 order_id = metadata.get('order_id')
 
                 if order_id is None:
-                    return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, 
+                                    status=status.HTTP_400_BAD_REQUEST)
 
                 order = get_object_or_404(Order, id=order_id)
                 order.status = 'paid'
@@ -59,6 +66,7 @@ class VerifyPaymentView(APIView):
         except Exception as e:
             logger.error("Error during payment verification: %s (type: %s)", str(e), type(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['POST'])
 def initialize_payment(request):
