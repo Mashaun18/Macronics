@@ -37,6 +37,7 @@ class VerifyPaymentView(APIView):
             # Log the payment data for debugging
             logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
 
+            # Check if payment_data is a dictionary before accessing its contents
             if isinstance(payment_data, dict) and payment_data.get('status', False):
                 metadata = payment_data['data'].get('metadata', {})
                 order_id = metadata.get('order_id')
@@ -61,6 +62,7 @@ class VerifyPaymentView(APIView):
         except Exception as e:
             logger.error("Error during payment verification: %s", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
