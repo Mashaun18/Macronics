@@ -24,55 +24,61 @@ class VerifyPaymentView(APIView):
         reference = request.query_params.get('reference')
         amount = request.query_params.get('amount')
 
-        logger.info("Received request with reference: %s", reference)
-
         if not reference or not amount:
-            logger.warning("Reference or amount missing.")
             return Response({'detail': 'Reference and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         paystack = Paystack()
         payment_data = paystack.verify_payment(reference)
 
-        logger.info("Payment data from Paystack: %s", payment_data)
+        logger.info(f"Payment data from Paystack for reference {reference}: {payment_data}")
 
         if payment_data.get('status') == 'success':
             data = payment_data['data']
-            
-            # Check if metadata exists and contains the order_id
             metadata = data.get('metadata', {})
-            if isinstance(metadata, str):
-                metadata = {}
-
             order_id = metadata.get('order_id')
 
-            # Log a warning if order_id is missing, and handle the case
             if not order_id:
-                logger.warning("Order ID is missing in payment metadata. Proceeding without updating the order.")
-                # If your application allows payments without order linkage, continue processing
-                return Response({'status': 'success', 'data': payment_data})
-            
+                logger.error("Order ID not found in payment metadata.")
+                return Response({
+                    'status': 'failed', 
+                    'detail': 'Order ID not found in metadata. Please contact support.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             try:
                 order = get_object_or_404(Order, id=order_id)
                 order.status = 'paid'
                 order.save()
 
+                # Save payment record
                 Payment.objects.create(
                     order=order,
                     reference=reference,
-                    amount=int(amount),  # Ensure this is an integer
+                    amount=amount,
                     status='success'
                 )
 
                 return Response({'status': 'success', 'data': payment_data})
 
-            except Exception as e:
-                logger.error("Error processing order: %s", str(e))
-                return Response({'status': 'failed', 'detail': 'Could not find or update order.'}, 
-                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            except Order.DoesNotExist:
+                logger.error(f"Order with ID {order_id} not found.")
+                return Response({
+                    'status': 'failed', 
+                    'detail': 'Order not found.'
+                }, status=status.HTTP_404_NOT_FOUND)
 
-        logger.error("Verification failed: %s", payment_data)
-        return Response({'status': 'failed', 'detail': payment_data.get('message', 'Unknown error occurred.')}, 
-                        status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                logger.error(f"Error processing order {order_id}: {str(e)}")
+                return Response({
+                    'status': 'failed', 
+                    'detail': 'Error processing order.'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        logger.error(f"Payment verification failed for reference {reference}: {payment_data}")
+        return Response({
+            'status': 'failed', 
+            'detail': payment_data.get('message', 'Payment verification failed.')
+        }, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
@@ -84,12 +90,18 @@ def initialize_payment(request):
         email = request.data.get('email')
         order_id = request.data.get('order_id')
 
+        # Validate input parameters
         if not all([amount, email, order_id]):
             return Response({'error': 'Missing parameters'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate request data
         if not isinstance(amount, (int, float)) or amount <= 0:
             return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Ensure proper conversion to kobo
+        try:
+            amount_in_kobo = int(float(amount) * 100)
+        except ValueError:
+            return Response({'error': 'Amount should be a number'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not isinstance(email, str) or not email:
             return Response({'error': 'Invalid email'}, status=status.HTTP_400_BAD_REQUEST)
@@ -97,31 +109,22 @@ def initialize_payment(request):
         if not isinstance(order_id, int) or order_id <= 0:
             return Response({'error': 'Invalid order_id'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create new payment reference and send request to Paystack API
-        headers = {
-            'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}',
-            'Content-Type': 'application/json'
-        }
-
+        # Create payment reference
         reference = f'{order_id}-{uuid.uuid4().hex}'
-        payload = {
-            'amount': int(float(amount) * 100),  # Convert to kobo
-            'email': email,
-            'reference': reference,
-            'callback_url': 'https://macronics.onrender.com/api/payments/callback/'
-        }
 
-        response = requests.post(f'{Paystack.BASE_URL}/transaction/initialize', headers=headers, json=payload)
+        # Initialize Paystack instance and create payment
+        paystack = Paystack()
+        payment_response = paystack.initialize_payment(email=email, amount=amount_in_kobo, order_id=order_id, reference=reference)
 
-        if response.status_code == 200:
-            data = response.json()
-            return Response({'data': data, 'order_id': order_id})
+        if payment_response.get('status') == 'success':
+            return Response({'data': payment_response, 'order_id': order_id}, status=status.HTTP_200_OK)
         else:
-            logger.error(f"Error initializing payment: {response.json()}")
-            return Response({'error': response.json().get('message', 'Error initializing payment')}, status=response.status_code)
+            error_message = payment_response.get('message', 'Error initializing payment')
+            return Response({'error': error_message}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         logger.error(f"Error initializing payment: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['GET'])
@@ -135,19 +138,27 @@ def payment_callback(request):
         paystack = Paystack()
         payment_data = paystack.verify_payment(reference)
 
-        if isinstance(payment_data, dict) and payment_data.get('status'):
-            order_id = payment_data['data']['metadata']['order_id']
+        if isinstance(payment_data, dict) and payment_data.get('status') == 'success':
+            data = payment_data.get('data', {})
+            metadata = data.get('metadata', {})
+            order_id = metadata.get('order_id')
+
+            if not order_id:
+                logger.error(f"Order ID not found in metadata for reference {reference}")
+                return Response({'status': 'failed', 'message': 'Order ID not found in payment metadata'}, status=status.HTTP_400_BAD_REQUEST)
+
             order = get_object_or_404(Order, id=order_id)
             order.status = 'paid'
             order.save()
 
             return Response({'status': 'success', 'message': 'Payment verified successfully'})
         else:
-            logger.error("Payment verification failed: %s", payment_data)
+            logger.error(f"Payment verification failed for reference {reference}: {payment_data}")
             return Response({'status': 'failed', 'message': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        logger.error(f"Error in payment callback: {str(e)}")
+        logger.error(f"Error in payment callback for reference {reference}: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
