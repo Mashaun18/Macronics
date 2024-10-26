@@ -8,33 +8,26 @@ class Paystack:
     SECRET_KEY = settings.PAYSTACK_SECRET_KEY
     BASE_URL = 'https://api.paystack.co'
 
-    @classmethod
-    def verify_payment(cls, ref, amount=None):
+    def verify_payment(self, ref, amount=None):
         """Verify a payment using its reference."""
-        url = f'{cls.BASE_URL}/transaction/verify/{ref}'
+        url = f'{self.BASE_URL}/transaction/verify/{ref}'
         headers = {
-            'Authorization': f'Bearer {cls.SECRET_KEY}',
+            'Authorization': f'Bearer {self.SECRET_KEY}',
             'Content-Type': 'application/json',
         }
+        response = requests.get(url, headers=headers)
 
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
+        # Log the response from Paystack for debugging
+        print("Paystack Response:", response.json())
+
+        if response.status_code == 200:
             response_data = response.json()
-
             if response_data['data']['status'] == 'success':
-                if amount and response_data['data']['amount'] != amount:
-                    logger.error(f"Amount mismatch: expected {amount}, got {response_data['data']['amount']}")
-                    return None
+                if amount and response_data['data']['amount'] == amount:
+                    return response_data
                 return response_data
-            else:
-                logger.error(f"Payment verification failed: {response_data}")
-        except requests.exceptions.HTTPError as http_err:
-            logger.error(f"HTTP error occurred: {http_err}")
-        except Exception as e:
-            logger.error(f"Error verifying payment: {str(e)}")
-
         return None
+
 
 
 

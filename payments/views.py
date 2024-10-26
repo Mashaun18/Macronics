@@ -35,6 +35,9 @@ class VerifyPaymentView(APIView):
             payment_data = paystack.verify_payment(reference, amount)
 
             if payment_data:
+                # Log the response for debugging
+                print("Payment data from Paystack:", payment_data)
+                
                 # Update order status and create new payment record
                 order_id = payment_data['data']['metadata']['order_id']
                 order = Order.objects.get(id=order_id)
@@ -50,9 +53,10 @@ class VerifyPaymentView(APIView):
 
                 return Response({'status': 'success', 'data': payment_data})
             else:
-                return Response({'status': 'failed'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'status': 'failed', 'detail': 'Paystack verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['POST'])
