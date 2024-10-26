@@ -1,3 +1,4 @@
+import json
 import requests
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
@@ -30,11 +31,14 @@ class VerifyPaymentView(APIView):
             paystack = Paystack()
             payment_data = paystack.verify_payment(reference, amount)
 
-            # Check if payment_data is a dictionary
+            # Check if payment_data is a string and try to parse it
             if isinstance(payment_data, str):
-                logger.error("Paystack returned a string instead of a dict: %s", payment_data)
-                return Response({'status': 'failed', 'detail': 'Invalid response from Paystack.'}, 
-                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                try:
+                    payment_data = json.loads(payment_data)
+                except json.JSONDecodeError:
+                    logger.error("Paystack returned an invalid JSON string: %s", payment_data)
+                    return Response({'status': 'failed', 'detail': 'Invalid response from Paystack.'}, 
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
 
@@ -63,6 +67,7 @@ class VerifyPaymentView(APIView):
                 logger.error("Verification failed: %s", payment_data)
                 return Response({'status': 'failed', 'detail': payment_data.get('message', 'Paystack verification failed.')}, 
                                 status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
             logger.error("Error during payment verification: %s (type: %s)", str(e), type(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
