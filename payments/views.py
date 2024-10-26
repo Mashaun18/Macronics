@@ -31,7 +31,22 @@ class VerifyPaymentView(APIView):
             paystack = Paystack()
             payment_data = paystack.verify_payment(reference, amount)
 
-            # Check if payment_data is a dictionary
+            # Log the type of payment_data immediately after fetching it
+            logger.info("Type of payment_data before any processing: %s", type(payment_data))
+
+            # Ensure payment_data is a dictionary
+            if isinstance(payment_data, str):
+                # This should not happen based on your previous logging, but just in case
+                try:
+                    payment_data = json.loads(payment_data)
+                except json.JSONDecodeError:
+                    logger.error("Paystack returned an invalid JSON string: %s", payment_data)
+                    return Response({'status': 'failed', 'detail': 'Invalid response from Paystack.'}, 
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
+
+            # Check if payment_data is a dict and contains expected fields
             if isinstance(payment_data, dict):
                 if not payment_data.get('status', False):
                     logger.error("Verification failed: %s", payment_data)
@@ -64,14 +79,16 @@ class VerifyPaymentView(APIView):
                 )
 
                 return Response({'status': 'success', 'data': payment_data})
+
             else:
-                logger.error("Verification failed, payment_data is not a dict: %s", payment_data)
-                return Response({'status': 'failed', 'detail': 'Unexpected response from Paystack.'}, 
+                logger.error("Verification failed: %s", payment_data)
+                return Response({'status': 'failed', 'detail': payment_data.get('message', 'Paystack verification failed.')}, 
                                 status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
-            logger.error("Error during payment verification: %s", str(e))
+            logger.error("Error during payment verification: %s (type: %s)", str(e), type(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['POST'])
