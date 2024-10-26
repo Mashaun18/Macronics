@@ -18,7 +18,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
 
-
 class VerifyPaymentView(APIView):
     def get(self, request, *args, **kwargs):
         reference = request.query_params.get('reference')
@@ -33,6 +32,7 @@ class VerifyPaymentView(APIView):
 
             logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
 
+            # Handle the response
             if isinstance(payment_data, dict) and payment_data.get('status', False):
                 metadata = payment_data['data'].get('metadata', {})
                 order_id = metadata.get('order_id')
@@ -40,7 +40,7 @@ class VerifyPaymentView(APIView):
                 if order_id is None:
                     return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                order = Order.objects.get(id=order_id)
+                order = get_object_or_404(Order, id=order_id)
                 order.status = 'paid'
                 order.save()
 
@@ -54,11 +54,11 @@ class VerifyPaymentView(APIView):
                 return Response({'status': 'success', 'data': payment_data})
             else:
                 logger.error("Verification failed: %s", payment_data)
-                return Response({'status': 'failed', 'detail': 'Paystack verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'status': 'failed', 'detail': payment_data.get('message', 'Paystack verification failed.')}, 
+                                status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error("Error during payment verification: %s (type: %s)", str(e), type(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @api_view(['POST'])
 def initialize_payment(request):
@@ -101,11 +101,10 @@ def initialize_payment(request):
             return Response(data)
         else:
             logger.error(f"Error initializing payment: {response.json()}")
-            return Response(response.json(), status=response.status_code)
+            return Response({'error': response.json().get('message', 'Error initializing payment')}, status=response.status_code)
     except Exception as e:
         logger.error(f"Error initializing payment: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @api_view(['GET'])
 def payment_callback(request):
@@ -118,8 +117,7 @@ def payment_callback(request):
         paystack = Paystack()
         payment_data = paystack.verify_payment(reference)
 
-        if payment_data:
-            # Update order/payment status
+        if payment_data and isinstance(payment_data, dict) and payment_data.get('status'):
             order_id = payment_data['data']['metadata']['order_id']
             order = get_object_or_404(Order, id=order_id)
             order.status = 'paid'
@@ -127,10 +125,12 @@ def payment_callback(request):
 
             return Response({'status': 'success', 'message': 'Payment verified successfully'})
         else:
-            return Response({'status': 'failed', 'message': 'Payment verification failed'})
+            logger.error("Payment verification failed: %s", payment_data)
+            return Response({'status': 'failed', 'message': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         logger.error(f"Error in payment callback: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
