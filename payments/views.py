@@ -24,15 +24,18 @@ class VerifyPaymentView(APIView):
         reference = request.query_params.get('reference')
         amount = request.query_params.get('amount')
 
+        logger.info("Received request with reference: %s", reference)
+
         if not reference or not amount:
+            logger.warning("Reference or amount missing.")
             return Response({'detail': 'Reference and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         paystack = Paystack()
-        payment_data = paystack.verify_payment(reference, amount)
+        payment_data = paystack.verify_payment(reference)
 
         logger.info("Payment data from Paystack: %s", payment_data)
 
-        if payment_data['status'] == 'success':
+        if payment_data.get('status') == 'success':
             data = payment_data['data']
             order_id = data.get('metadata', {}).get('order_id')
 
@@ -43,26 +46,27 @@ class VerifyPaymentView(APIView):
 
             try:
                 order = get_object_or_404(Order, id=order_id)
+                order.status = 'paid'
+                order.save()
+
+                Payment.objects.create(
+                    order=order,
+                    reference=reference,
+                    amount=int(amount),  # Ensure this is an integer
+                    status='success'
+                )
+
+                return Response({'status': 'success', 'data': payment_data})
+
             except Exception as e:
-                logger.error("Error fetching order: %s", str(e))
-                return Response({'status': 'failed', 'detail': 'Could not find order.'}, 
-                                status=status.HTTP_404_NOT_FOUND)
-
-            order.status = 'paid'
-            order.save()
-
-            Payment.objects.create(
-                order=order,
-                reference=reference,
-                amount=amount,
-                status='success'
-            )
-
-            return Response({'status': 'success', 'data': payment_data})
+                logger.error("Error processing order: %s", str(e))
+                return Response({'status': 'failed', 'detail': 'Could not find or update order.'}, 
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         logger.error("Verification failed: %s", payment_data)
-        return Response({'status': 'failed', 'detail': payment_data['message']}, 
+        return Response({'status': 'failed', 'detail': payment_data.get('message', 'Unknown error occurred.')}, 
                         status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(['POST'])
