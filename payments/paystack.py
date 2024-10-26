@@ -23,7 +23,8 @@ class Paystack:
             "reference": reference,  # Include reference in the data
             "metadata": {
                 "order_id": order_id
-            }
+            },
+            'callback_url': 'https://macronics.onrender.com/api/payments/callback/'
         }
         try:
             response = requests.post(url, headers=headers, json=data)

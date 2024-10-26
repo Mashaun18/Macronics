@@ -34,7 +34,7 @@ class VerifyPaymentView(APIView):
         logger.info(f"Payment data from Paystack for reference {reference}: {payment_data}")
 
         # Check if the payment verification was successful
-        if payment_data.get('status') == 'success':
+        if payment_data.get('status') is True and payment_data.get('data'):
             data = payment_data['data']
             metadata = data.get('metadata', {})
             order_id = metadata.get('order_id')
