@@ -31,6 +31,9 @@ class VerifyPaymentView(APIView):
             paystack = Paystack()
             payment_data = paystack.verify_payment(reference, amount)
 
+            # Log raw payment_data
+            logger.info("Raw Paystack Response: %s (type: %s)", payment_data, type(payment_data))
+
             # Check if payment_data is a string and try to parse it
             if isinstance(payment_data, str):
                 try:
@@ -42,9 +45,15 @@ class VerifyPaymentView(APIView):
 
             logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
 
-            # Handle the response
+            # Check if payment_data is a dict and contains expected fields
             if isinstance(payment_data, dict) and payment_data.get('status', False):
-                metadata = payment_data['data'].get('metadata', {})
+                data = payment_data.get('data', {})
+                if not isinstance(data, dict):
+                    logger.error("Data is not a dictionary: %s (type: %s)", data, type(data))
+                    return Response({'status': 'failed', 'detail': 'Invalid response structure.'}, 
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                metadata = data.get('metadata', {})
                 order_id = metadata.get('order_id')
 
                 if order_id is None:
