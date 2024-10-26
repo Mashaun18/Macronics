@@ -37,10 +37,17 @@ class VerifyPaymentView(APIView):
             order_id = data.get('metadata', {}).get('order_id')
 
             if order_id is None:
+                logger.error("Order ID not found in payment metadata.")
                 return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, 
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            order = get_object_or_404(Order, id=order_id)
+            try:
+                order = get_object_or_404(Order, id=order_id)
+            except Exception as e:
+                logger.error("Error fetching order: %s", str(e))
+                return Response({'status': 'failed', 'detail': 'Could not find order.'}, 
+                                status=status.HTTP_404_NOT_FOUND)
+
             order.status = 'paid'
             order.save()
 
