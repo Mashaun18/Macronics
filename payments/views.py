@@ -38,6 +38,7 @@ class VerifyPaymentView(APIView):
             if isinstance(payment_data, str):
                 try:
                     payment_data = json.loads(payment_data)
+                    logger.info("Parsed payment data: %s (type: %s)", payment_data, type(payment_data))
                 except json.JSONDecodeError:
                     logger.error("Paystack returned an invalid JSON string: %s", payment_data)
                     return Response({'status': 'failed', 'detail': 'Invalid response from Paystack.'}, 
@@ -80,6 +81,7 @@ class VerifyPaymentView(APIView):
         except Exception as e:
             logger.error("Error during payment verification: %s (type: %s)", str(e), type(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['POST'])
