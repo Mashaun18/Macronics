@@ -78,7 +78,7 @@ def initialize_payment(request):
             'amount': int(float(amount) * 100),  # Convert to kobo
             'email': email,
             'reference': f'{order_id}-{uuid.uuid4().hex}',
-            'callback_url': 'https://macronics.onrender.com/payment/callback/'  # Updated with your render domain
+            'callback_url': 'https://macronics.onrender.com/payments/callback/'  # Updated with your render domain
         }
 
         response = requests.post(f'{Paystack.BASE_URL}/transaction/initialize', headers=headers, json=payload)
