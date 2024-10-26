@@ -34,10 +34,10 @@ class VerifyPaymentView(APIView):
             # Verify the payment using the instantiated paystack object
             payment_data = paystack.verify_payment(reference, amount)
 
-            if payment_data and payment_data['status']:
-                # Log the payment data for debugging
-                logger.info("Payment data from Paystack: %s", payment_data)
+            # Log the payment data for debugging
+            logger.info("Payment data from Paystack: %s", payment_data)
 
+            if payment_data and payment_data.get('status', False):
                 # Safely extract order_id
                 metadata = payment_data['data'].get('metadata', {})
                 order_id = metadata.get('order_id')
@@ -63,6 +63,7 @@ class VerifyPaymentView(APIView):
         except Exception as e:
             logger.error("Error during payment verification: %s", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
