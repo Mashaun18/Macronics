@@ -2,58 +2,57 @@ import requests
 from django.conf import settings
 import logging
 from django.http import JsonResponse
-import json  # Don't forget to import json
+import json
 
 logger = logging.getLogger(__name__)
 
 class Paystack:
     SECRET_KEY = settings.PAYSTACK_SECRET_KEY
     BASE_URL = 'https://api.paystack.co'
-
-    @staticmethod
-    def verify_payment(request):
-        reference = request.GET.get('reference')
-        amount = request.GET.get('amount')
-
+    
+    def verify_payment(self, reference, amount):
         # Make the request to Paystack
-        url = f"{Paystack.BASE_URL}/transaction/verify/{reference}"
+        url = f"{self.BASE_URL}/transaction/verify/{reference}"
         headers = {
-            "Authorization": f"Bearer {Paystack.SECRET_KEY}"  # Use the secret key from settings
+            "Authorization": f"Bearer {self.SECRET_KEY}"
         }
 
-        response = requests.get(url, headers=headers)
-
         try:
-            # Make sure to parse the response correctly
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()  # Raise an error for bad responses
+            
             payment_data = response.json()
 
             if payment_data['status']:
                 # Extract necessary information
                 transaction_data = payment_data['data']
 
-                # You can now access properties directly
-                transaction_id = transaction_data['id']
+                # Access properties directly
                 transaction_amount = transaction_data['amount']
-                transaction_status = transaction_data['status']
 
                 # Verify the amount if necessary
                 if transaction_amount == int(amount):
-                    return JsonResponse({
+                    return {
                         'status': 'success',
                         'message': 'Payment verified successfully',
                         'data': transaction_data
-                    })
+                    }
                 else:
-                    return JsonResponse({'status': 'error', 'message': 'Amount mismatch'}, status=400)
+                    return {'status': 'error', 'message': 'Amount mismatch'}
 
-            return JsonResponse({'status': 'error', 'message': payment_data['message']}, status=400)
+            return {'status': 'error', 'message': payment_data['message']}
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request to Paystack failed: {str(e)}")
+            return {'status': 'error', 'message': 'Failed to reach Paystack API.'}
 
         except json.JSONDecodeError:
-            return JsonResponse({'status': 'error', 'message': 'Invalid response from Paystack'}, status=400)
+            logger.error("Error decoding JSON response")
+            return {'status': 'error', 'message': 'Invalid response from Paystack'}
+        
         except Exception as e:
-            logger.error(f"Error during payment verification: {str(e)}")  # Log the error
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
+            logger.error(f"Error during payment verification: {str(e)}")
+            return {'status': 'error', 'message': str(e)}
 
 
 

@@ -27,68 +27,35 @@ class VerifyPaymentView(APIView):
         if not reference or not amount:
             return Response({'detail': 'Reference and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            paystack = Paystack()
-            payment_data = paystack.verify_payment(reference, amount)
+        paystack = Paystack()
+        payment_data = paystack.verify_payment(reference, amount)
 
-            # Log the type of payment_data immediately after fetching it
-            logger.info("Type of payment_data before any processing: %s", type(payment_data))
+        logger.info("Payment data from Paystack: %s", payment_data)
 
-            # Ensure payment_data is a dictionary
-            if isinstance(payment_data, str):
-                # This should not happen based on your previous logging, but just in case
-                try:
-                    payment_data = json.loads(payment_data)
-                except json.JSONDecodeError:
-                    logger.error("Paystack returned an invalid JSON string: %s", payment_data)
-                    return Response({'status': 'failed', 'detail': 'Invalid response from Paystack.'}, 
-                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        if payment_data['status'] == 'success':
+            data = payment_data['data']
+            order_id = data.get('metadata', {}).get('order_id')
 
-            logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
-
-            # Check if payment_data is a dict and contains expected fields
-            if isinstance(payment_data, dict):
-                if not payment_data.get('status', False):
-                    logger.error("Verification failed: %s", payment_data)
-                    return Response({'status': 'failed', 'detail': payment_data.get('message', 'Paystack verification failed.')}, 
-                                    status=status.HTTP_400_BAD_REQUEST)
-
-                data = payment_data.get('data', {})
-                if not isinstance(data, dict):
-                    logger.error("Data is not a dictionary: %s (type: %s)", data, type(data))
-                    return Response({'status': 'failed', 'detail': 'Invalid response structure.'}, 
-                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-                # Handle metadata extraction
-                metadata = data.get('metadata', {})
-                order_id = metadata.get('order_id')
-
-                if order_id is None:
-                    return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, 
-                                    status=status.HTTP_400_BAD_REQUEST)
-
-                order = get_object_or_404(Order, id=order_id)
-                order.status = 'paid'
-                order.save()
-
-                Payment.objects.create(
-                    order=order,
-                    reference=reference,
-                    amount=amount,
-                    status='success'
-                )
-
-                return Response({'status': 'success', 'data': payment_data})
-
-            else:
-                logger.error("Verification failed: %s", payment_data)
-                return Response({'status': 'failed', 'detail': payment_data.get('message', 'Paystack verification failed.')}, 
+            if order_id is None:
+                return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, 
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        except Exception as e:
-            logger.error("Error during payment verification: %s (type: %s)", str(e), type(e))
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            order = get_object_or_404(Order, id=order_id)
+            order.status = 'paid'
+            order.save()
 
+            Payment.objects.create(
+                order=order,
+                reference=reference,
+                amount=amount,
+                status='success'
+            )
+
+            return Response({'status': 'success', 'data': payment_data})
+
+        logger.error("Verification failed: %s", payment_data)
+        return Response({'status': 'failed', 'detail': payment_data['message']}, 
+                        status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
