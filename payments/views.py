@@ -30,22 +30,20 @@ class VerifyPaymentView(APIView):
         try:
             # Instantiate the Paystack class
             paystack = Paystack()
-            
+
             # Verify the payment using the instantiated paystack object
             payment_data = paystack.verify_payment(reference, amount)
 
             # Log the payment data for debugging
-            logger.info("Payment data from Paystack: %s", payment_data)
+            logger.info("Payment data from Paystack: %s (type: %s)", payment_data, type(payment_data))
 
-            if payment_data and payment_data.get('status', False):
-                # Safely extract order_id
+            if isinstance(payment_data, dict) and payment_data.get('status', False):
                 metadata = payment_data['data'].get('metadata', {})
                 order_id = metadata.get('order_id')
 
                 if order_id is None:
                     return Response({'status': 'failed', 'detail': 'Order ID not found in payment metadata.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                # If order_id is found, proceed to update order status
                 order = Order.objects.get(id=order_id)
                 order.status = 'paid'
                 order.save()
@@ -63,6 +61,7 @@ class VerifyPaymentView(APIView):
         except Exception as e:
             logger.error("Error during payment verification: %s", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
