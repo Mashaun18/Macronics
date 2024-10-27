@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
 from .models import Payment
 from .serializers import PaymentSerializer
-from orders.models import Order
+from orders.models import Order, OrderStatus
 from .paystack import Paystack
 import uuid
 import logging
@@ -23,11 +23,9 @@ class VerifyPaymentView(APIView):
     def get(self, request, *args, **kwargs):
         reference = request.query_params.get('reference')
         amount = request.query_params.get('amount')
-        # Convert to int
         amount = int(float(amount)) if amount else None
 
-        # Validate input parameters
-        if not reference or amount is None:
+        if not reference or not amount:
             return Response({'detail': 'Reference and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         paystack = Paystack()
@@ -35,7 +33,6 @@ class VerifyPaymentView(APIView):
 
         logger.info(f"Payment data from Paystack for reference {reference}: {payment_data}")
 
-        # Check if the payment verification was successful
         if payment_data.get('status') is True and payment_data.get('data'):
             data = payment_data['data']
             metadata = data.get('metadata', {})
@@ -49,17 +46,14 @@ class VerifyPaymentView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             try:
-                # Fetch the order based on order_id
                 order = get_object_or_404(Order, id=order_id)
-
-                # Check the current status of the order before updating
                 logger.info(f"Current order status before update: {order.status}")
 
-                if order.status == 'pending':
-                    order.status = 'paid'
+                # Check if the current status is valid for updating
+                if order.status == OrderStatus.PENDING_STATUS:  # Ensure this matches the enum
+                    order.status = OrderStatus.PROCESSING.value  # Update to the next status, e.g., PROCESSING
                     order.save()
 
-                    # Save payment record
                     Payment.objects.create(
                         order=order,
                         reference=reference,
@@ -69,18 +63,8 @@ class VerifyPaymentView(APIView):
 
                     return Response({'status': 'success', 'data': payment_data}, status=status.HTTP_200_OK)
                 else:
-                    logger.error(f"Cannot update order status from {order.status} to paid.")
-                    return Response({
-                        'status': 'failed', 
-                        'detail': f'Invalid order status: {order.status}. Cannot update to paid.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-            except Order.DoesNotExist:
-                logger.error(f"Order with ID {order_id} not found.")
-                return Response({
-                    'status': 'failed', 
-                    'detail': 'Order not found.'
-                }, status=status.HTTP_404_NOT_FOUND)
+                    logger.error(f"Cannot update order status from {order.status} to processing.")
+                    return Response({'status': 'failed', 'detail': f'Invalid order status: {order.status}. Cannot update to processing.'}, status=status.HTTP_400_BAD_REQUEST)
 
             except Exception as e:
                 logger.error(f"Error processing order {order_id}: {str(e)}")
@@ -89,12 +73,12 @@ class VerifyPaymentView(APIView):
                     'detail': 'Error processing order.'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Log and return failure if payment verification was not successful
         logger.error(f"Payment verification failed for reference {reference}: {payment_data}")
         return Response({
             'status': 'failed', 
             'detail': payment_data.get('message', 'Payment verification failed.')
         }, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
@@ -155,8 +139,7 @@ def payment_callback(request):
         paystack = Paystack()
         payment_data = paystack.verify_payment(reference)
 
-        # Ensure the response structure is as expected
-        if isinstance(payment_data, dict) and payment_data.get('status') and payment_data.get('data'):
+        if isinstance(payment_data, dict) and payment_data.get('status') == 'success':
             data = payment_data.get('data', {})
             metadata = data.get('metadata', {})
             order_id = metadata.get('order_id')
@@ -165,18 +148,25 @@ def payment_callback(request):
                 logger.error(f"Order ID not found in metadata for reference {reference}")
                 return Response({'status': 'failed', 'message': 'Order ID not found in payment metadata'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Fetch the order to update its status
             order = get_object_or_404(Order, id=order_id)
-            order.status = 'paid'
-            order.save()
 
-            return Response({'status': 'success', 'message': 'Payment verified successfully'}, status=status.HTTP_200_OK)
+            # Check the current status of the order before updating
+            logger.info(f"Current order status before update: {order.status}")
+
+            if order.status == 'pending':
+                order.status = 'paid'
+                order.save()
+                return Response({'status': 'success', 'message': 'Payment verified successfully'})
+            else:
+                logger.error(f"Cannot update order status from {order.status} to paid.")
+                return Response({'status': 'failed', 'message': f'Invalid order status: {order.status}. Cannot update to paid.'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             logger.error(f"Payment verification failed for reference {reference}: {payment_data}")
-            return Response({'status': 'failed', 'message': payment_data.get('message', 'Payment verification failed')}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status': 'failed', 'message': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         logger.error(f"Error in payment callback for reference {reference}: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 

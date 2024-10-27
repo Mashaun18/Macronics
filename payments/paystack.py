@@ -7,46 +7,38 @@ import json
 logger = logging.getLogger(__name__)
 
 class Paystack:
-    SECRET_KEY = settings.PAYSTACK_SECRET_KEY
-    BASE_URL = 'https://api.paystack.co'
-
-    # Method to initialize the payment
-    def initialize_payment(self, email, amount, order_id, reference):
-        url = f"{self.BASE_URL}/transaction/initialize"
-        headers = {
-            "Authorization": f"Bearer {self.SECRET_KEY}",
+    def __init__(self):
+        self.secret_key = settings.PAYSTACK_SECRET_KEY
+        self.base_url = 'https://api.paystack.co'
+        self.headers = {
+            "Authorization": f"Bearer {self.secret_key}",
             "Content-Type": "application/json"
         }
-        data = {
-            "email": email,
-            "amount": amount * 100,  # Convert amount to kobo
-            "reference": reference,  # Include reference in the data
-            "metadata": {
-                "order_id": order_id
-            },
-            'callback_url': 'https://macronics.onrender.com/api/payments/callback/'
-        }
-        try:
-            response = requests.post(url, headers=headers, json=data)
-            logger.debug(f"Paystack response: {response.json()}")
-            response.raise_for_status()  # Raises an exception for 4xx/5xx errors
-            
-            payment_response = response.json()
-            if payment_response['status']:
-                return {
-                    'status': 'success',
-                    'authorization_url': payment_response['data']['authorization_url']
-                }
-            else:
-                logger.error(f"Error initializing payment: {payment_response['message']}")
-                return {'status': 'error', 'message': payment_response['message']}
-        except requests.HTTPError as http_err:
-            logger.error(f"HTTP error occurred: {str(http_err)}")
-            return {'status': 'error', 'message': 'Payment initialization failed due to a server error.'}
-        except Exception as e:
-            logger.error(f"Error initializing payment: {str(e)}")
-            return {'status': 'error', 'message': str(e)}
 
+    def initialize_payment(self, order):
+        # Assuming 'order' is an instance of Order
+        data = {
+            'amount': int(order.total_amount * 100),  # Amount in kobo
+            'currency': 'NGN',
+            'email': order.user.email,
+            'metadata': {
+                'order_id': order.id,  # Include the order ID here
+                # Add other metadata as needed
+            },
+            'callback_url': 'https://macronics.onrender.com/api/payments/callback/'  # Optional
+        }
+
+        try:
+            response = requests.post(f"{self.base_url}/transaction/initialize", json=data, headers=self.headers)
+            response.raise_for_status()  # Raises an error for 4xx/5xx responses
+            logger.debug(f"Paystack initialization response: {response.json()}")
+            return response.json()  # Return the response data as JSON
+        except requests.HTTPError as http_err:
+            logger.error(f"HTTP error occurred while initializing payment: {str(http_err)}")
+            return {'status': 'error', 'message': 'Payment initialization failed due to server error.'}
+        except Exception as e:
+            logger.error(f"Unexpected error during payment initialization: {str(e)}")
+            return {'status': 'error', 'message': str(e)}
 
     # Method to verify the payment
     def verify_payment(self, reference):
@@ -60,7 +52,11 @@ class Paystack:
             response.raise_for_status()  # Raises an exception for 4xx/5xx errors
 
             payment_data = response.json()
-            return payment_data
+            if payment_data['status'] is True:
+                return payment_data
+            else:
+                logger.error(f"Payment verification failed: {payment_data['message']}")
+                return {'status': 'error', 'message': payment_data['message']}
         except requests.HTTPError as http_err:
             logger.error(f"HTTP error occurred: {str(http_err)}")
             return {'status': 'error', 'message': 'Payment verification failed due to server error.'}
@@ -70,7 +66,6 @@ class Paystack:
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             return {'status': 'error', 'message': str(e)}
-
 
 
 
