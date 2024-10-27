@@ -141,7 +141,6 @@ def payment_callback(request):
         # Log the payment data received from Paystack for debugging
         logger.info(f"Received payment data for reference {reference}: {payment_data}")
 
-        # Check if verification was successful
         if isinstance(payment_data, dict) and payment_data.get('status'):
             data = payment_data.get('data', {})
             payment_status = data.get('status')
@@ -155,14 +154,12 @@ def payment_callback(request):
                     logger.error(f"Order ID not found in metadata for reference {reference}")
                     return Response({'status': 'failed', 'message': 'Order ID not found in payment metadata'}, status=status.HTTP_400_BAD_REQUEST)
 
-                # Fetch the order based on order_id
                 order = get_object_or_404(Order, id=order_id)
 
-                # Log the current order status before updating
                 logger.info(f"Current order status before update for Order ID {order_id}: {order.status}")
 
-                # Check the current status of the order before updating
-                if order.status == 'pending':
+                # Update logic to allow status change from both 'pending' and 'processing'
+                if order.status in ['pending', 'processing']:
                     order.status = 'paid'
                     order.save()
                     logger.info(f"Order ID {order_id} updated to paid successfully.")
@@ -179,6 +176,7 @@ def payment_callback(request):
     except Exception as e:
         logger.error(f"Error in payment callback for reference {reference}: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
