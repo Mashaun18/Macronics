@@ -51,7 +51,7 @@ class VerifyPaymentView(APIView):
                 logger.info(f"Current order status before update: {order.status}")
 
                 # Check if the current status is valid for updating
-                if order.status == OrderStatus.PENDING_STATUS:  # Ensure this matches the enum
+                if order.status == OrderStatus.PENDING.value:  # Ensure this matches the enum
                     order.status = OrderStatus.PROCESSING.value  # Update to the next status, e.g., PROCESSING
                     order.save()
 
@@ -112,7 +112,7 @@ def initialize_payment(request):
 
         # Initialize Paystack instance and create payment
         paystack = Paystack()
-        payment_response = paystack.initialize_payment(email=email, amount=amount_in_kobo, order_id=order_id, reference=reference)
+        payment_response = paystack.initialize_payment(email=email, amount=amount_in_kobo, order_id=order_id, reference=reference, metadata={'order_id': order_id})
 
         if payment_response.get('status') == 'success':
             return Response({'data': payment_response, 'order_id': order_id}, status=status.HTTP_200_OK)
