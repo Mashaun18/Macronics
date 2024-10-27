@@ -19,7 +19,7 @@ class Paystack:
         }
         data = {
             "email": email,
-            "amount": amount,  # amount in kobo
+            "amount": amount * 100,  # Convert amount to kobo
             "reference": reference,  # Include reference in the data
             "metadata": {
                 "order_id": order_id
@@ -28,15 +28,24 @@ class Paystack:
         }
         try:
             response = requests.post(url, headers=headers, json=data)
+            logger.debug(f"Paystack response: {response.json()}")
             response.raise_for_status()  # Raises an exception for 4xx/5xx errors
             
-            return response.json()
+            payment_response = response.json()
+            if payment_response['status']:
+                return {
+                    'status': 'success',
+                    'authorization_url': payment_response['data']['authorization_url']
+                }
+            else:
+                logger.error(f"Error initializing payment: {payment_response['message']}")
+                return {'status': 'error', 'message': payment_response['message']}
         except requests.HTTPError as http_err:
-                logger.error(f"HTTP error occurred: {str(http_err)}")
-                return {'status': 'error', 'message': 'Payment initialization failed due to a server error.'}
+            logger.error(f"HTTP error occurred: {str(http_err)}")
+            return {'status': 'error', 'message': 'Payment initialization failed due to a server error.'}
         except Exception as e:
-                logger.error(f"Error initializing payment: {str(e)}")
-                return {'status': 'error', 'message': str(e)}
+            logger.error(f"Error initializing payment: {str(e)}")
+            return {'status': 'error', 'message': str(e)}
 
 
     # Method to verify the payment
@@ -50,19 +59,17 @@ class Paystack:
             response = requests.get(url, headers=headers)
             response.raise_for_status()  # Raises an exception for 4xx/5xx errors
 
-            try:
-                payment_data = response.json()
-                return payment_data
-            except json.JSONDecodeError:
-                logger.error("JSON decode error from Paystack response.")
-                return {'status': 'error', 'message': 'Received an invalid response from Paystack.'}
+            payment_data = response.json()
+            return payment_data
         except requests.HTTPError as http_err:
             logger.error(f"HTTP error occurred: {str(http_err)}")
             return {'status': 'error', 'message': 'Payment verification failed due to server error.'}
+        except json.JSONDecodeError:
+            logger.error("JSON decode error from Paystack response.")
+            return {'status': 'error', 'message': 'Received an invalid response from Paystack.'}
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             return {'status': 'error', 'message': str(e)}
-
 
 
 

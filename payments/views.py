@@ -23,6 +23,8 @@ class VerifyPaymentView(APIView):
     def get(self, request, *args, **kwargs):
         reference = request.query_params.get('reference')
         amount = request.query_params.get('amount')
+        # Convert to int
+        amount = int(float(amount)) if amount else None
 
         # Validate input parameters
         if not reference or not amount:
@@ -142,7 +144,8 @@ def payment_callback(request):
         paystack = Paystack()
         payment_data = paystack.verify_payment(reference)
 
-        if isinstance(payment_data, dict) and payment_data.get('status') == 'success':
+        # Ensure the response structure is as expected
+        if isinstance(payment_data, dict) and payment_data.get('status') and payment_data.get('data'):
             data = payment_data.get('data', {})
             metadata = data.get('metadata', {})
             order_id = metadata.get('order_id')
@@ -151,14 +154,15 @@ def payment_callback(request):
                 logger.error(f"Order ID not found in metadata for reference {reference}")
                 return Response({'status': 'failed', 'message': 'Order ID not found in payment metadata'}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Fetch the order to update its status
             order = get_object_or_404(Order, id=order_id)
             order.status = 'paid'
             order.save()
 
-            return Response({'status': 'success', 'message': 'Payment verified successfully'})
+            return Response({'status': 'success', 'message': 'Payment verified successfully'}, status=status.HTTP_200_OK)
         else:
             logger.error(f"Payment verification failed for reference {reference}: {payment_data}")
-            return Response({'status': 'failed', 'message': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status': 'failed', 'message': payment_data.get('message', 'Payment verification failed')}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         logger.error(f"Error in payment callback for reference {reference}: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
