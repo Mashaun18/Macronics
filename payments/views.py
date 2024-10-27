@@ -19,13 +19,14 @@ class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
 
+
 class VerifyPaymentView(APIView):
     def get(self, request, *args, **kwargs):
         reference = request.query_params.get('reference')
         amount = request.query_params.get('amount')
         amount = int(float(amount)) if amount else None
 
-        if not reference or not amount:
+        if not reference or amount is None:
             return Response({'detail': 'Reference and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         paystack = Paystack()
@@ -80,10 +81,6 @@ class VerifyPaymentView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-
-
-
 @api_view(['POST'])
 def initialize_payment(request):
     try:
@@ -125,7 +122,6 @@ def initialize_payment(request):
     except Exception as e:
         logger.error(f"Error initializing payment: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 @api_view(['GET'])
