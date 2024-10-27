@@ -135,33 +135,37 @@ def payment_callback(request):
         paystack = Paystack()
         payment_data = paystack.verify_payment(reference)
 
-        if isinstance(payment_data, dict) and payment_data.get('status') == 'success':
-            data = payment_data.get('data', {})
+        # Check if the verification was successful
+        if payment_data.get('status', False) and payment_data['data']['status'] == 'success':
+            data = payment_data['data']
             metadata = data.get('metadata', {})
             order_id = metadata.get('order_id')
 
-            if order_id is None:
+            if not order_id:
                 logger.error(f"Order ID not found in metadata for reference {reference}. Payment data: {payment_data}")
                 return Response({'status': 'failed', 'message': 'Order ID not found in payment metadata'}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Fetch the order from the database
             order = get_object_or_404(Order, id=order_id)
-
             logger.info(f"Current order status before update: {order.status}")
 
-            # Check the current order status using the enum
-            if order.status == OrderStatus.PROCESSING:  # Adjust this line to your actual enum value
-                order.status = OrderStatus.SHIPPED  # Use the appropriate enum value here
+            # Update the order status if it's in processing
+            if order.status == OrderStatus.PROCESSING.value:  # Make sure this is the correct enum check
+                order.status = OrderStatus.SHIPPED.value  # Ensure this is the correct enum value for paid
                 order.save()
-                return Response({'status': 'success', 'message': 'Payment verified successfully'})
+
+                return Response({'status': 'success', 'message': 'Payment verified and order updated successfully'})
             else:
-                logger.error(f"Cannot update order status from {order.status} to paid for Order ID {order_id}.")
-                return Response({'status': 'failed', 'message': f'Invalid order status: {order.status}. Cannot update to paid.'}, status=status.HTTP_400_BAD_REQUEST)
+                logger.error(f"Order {order_id} cannot be updated from {order.status} to shipped. Invalid status transition.")
+                return Response({'status': 'failed', 'message': f'Invalid order status: {order.status}. Cannot update to shipped.'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             logger.error(f"Payment verification failed for reference {reference}: {payment_data}")
             return Response({'status': 'failed', 'message': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
+
     except Exception as e:
         logger.error(f"Error in payment callback for reference {reference}: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
