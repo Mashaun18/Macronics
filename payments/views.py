@@ -27,7 +27,7 @@ class VerifyPaymentView(APIView):
         amount = int(float(amount)) if amount else None
 
         # Validate input parameters
-        if not reference or not amount:
+        if not reference or amount is None:
             return Response({'detail': 'Reference and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         paystack = Paystack()
@@ -51,18 +51,29 @@ class VerifyPaymentView(APIView):
             try:
                 # Fetch the order based on order_id
                 order = get_object_or_404(Order, id=order_id)
-                order.status = 'paid'
-                order.save()
 
-                # Save payment record
-                Payment.objects.create(
-                    order=order,
-                    reference=reference,
-                    amount=amount,
-                    status='success'
-                )
+                # Check the current status of the order before updating
+                logger.info(f"Current order status before update: {order.status}")
 
-                return Response({'status': 'success', 'data': payment_data}, status=status.HTTP_200_OK)
+                if order.status == 'pending':
+                    order.status = 'paid'
+                    order.save()
+
+                    # Save payment record
+                    Payment.objects.create(
+                        order=order,
+                        reference=reference,
+                        amount=amount,
+                        status='success'
+                    )
+
+                    return Response({'status': 'success', 'data': payment_data}, status=status.HTTP_200_OK)
+                else:
+                    logger.error(f"Cannot update order status from {order.status} to paid.")
+                    return Response({
+                        'status': 'failed', 
+                        'detail': f'Invalid order status: {order.status}. Cannot update to paid.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
 
             except Order.DoesNotExist:
                 logger.error(f"Order with ID {order_id} not found.")
