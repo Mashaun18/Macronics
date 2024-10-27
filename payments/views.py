@@ -140,22 +140,21 @@ def payment_callback(request):
             metadata = data.get('metadata', {})
             order_id = metadata.get('order_id')
 
-            if not order_id:
-                logger.error(f"Order ID not found in metadata for reference {reference}")
+            if order_id is None:
+                logger.error(f"Order ID not found in metadata for reference {reference}. Payment data: {payment_data}")
                 return Response({'status': 'failed', 'message': 'Order ID not found in payment metadata'}, status=status.HTTP_400_BAD_REQUEST)
 
             order = get_object_or_404(Order, id=order_id)
 
-            # Check the current status of the order before updating
             logger.info(f"Current order status before update: {order.status}")
 
-            # Use the enum to check the order status
+            # Check the current order status using the enum
             if order.status == OrderStatus.PROCESSING:  # Adjust this line to your actual enum value
-                order.status = OrderStatus.PAID  # Use the appropriate enum value here
+                order.status = OrderStatus.SHIPPED  # Use the appropriate enum value here
                 order.save()
                 return Response({'status': 'success', 'message': 'Payment verified successfully'})
             else:
-                logger.error(f"Cannot update order status from {order.status} to paid.")
+                logger.error(f"Cannot update order status from {order.status} to paid for Order ID {order_id}.")
                 return Response({'status': 'failed', 'message': f'Invalid order status: {order.status}. Cannot update to paid.'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             logger.error(f"Payment verification failed for reference {reference}: {payment_data}")
@@ -163,6 +162,7 @@ def payment_callback(request):
     except Exception as e:
         logger.error(f"Error in payment callback for reference {reference}: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
