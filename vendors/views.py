@@ -18,35 +18,24 @@ class VendorViewSet(viewsets.ModelViewSet):
         if user.user_type == UserRole.VENDOR:
             return Vendor.objects.filter(user=user)
         return Vendor.objects.all()
-    
-    def create(self, request, *args, **kwargs):
-        vendor = Vendor.objects.get(user=request.user)
-        if not vendor.is_subscription_active():
-            return Response(
-                {"error": "You must pay the listing fee to access this feature."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        return super().create(request, *args, **kwargs)
 
     @action(detail=False, methods=['POST'], permission_classes=[IsAuthenticated])
-    def pay_listing_fee(self, request):
+    def pay_subscription_fee(self, request):
         """
-        Handles payment for vendor listing fee.
+        Handles payment for vendor subscription fee.
         """
         user = request.user
 
         # Ensure the user is a vendor
         if user.user_type != UserRole.VENDOR:
-            return Response({'error': 'Only vendors can pay the listing fee.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'Only vendors can pay the subscription fee.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # Check if the vendor has already paid
+        # Get the vendor instance
         vendor = get_object_or_404(Vendor, user=user)
-        if vendor.listing_fee_paid:
-            return Response({'message': 'You have already paid the listing fee.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Initialize the payment using Paystack
         paystack = Paystack()
-        amount = 2000 * 100  # Paystack requires amounts in kobo
+        amount = 5000 * 100  # Paystack requires amounts in kobo
         email = user.email
         reference = paystack.generate_reference()
 
@@ -59,7 +48,7 @@ class VendorViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['GET'], permission_classes=[IsAuthenticated])
     def verify_payment(self, request):
         """
-        Verifies the payment for the vendor listing fee.
+        Verifies the payment for the vendor subscription fee.
         """
         reference = request.GET.get('reference')
         if not reference:
@@ -79,28 +68,12 @@ class VendorViewSet(viewsets.ModelViewSet):
 
                 vendor = get_object_or_404(Vendor, id=vendor_id)
 
-                if vendor.listing_fee_paid:
-                    return Response({'message': 'Payment already verified.'}, status=status.HTTP_200_OK)
+                # Extend the subscription by one month
+                vendor.extend_subscription()
 
-                # Mark vendor as having paid the listing fee
-                vendor.listing_fee_paid = True
-                vendor.save()
-
-                return Response({'message': 'Payment verified and listing fee updated.'}, status=status.HTTP_200_OK)
+                return Response({'message': 'Payment verified and subscription extended.'}, status=status.HTTP_200_OK)
             else:
                 return Response({'error': 'Payment verification failed.'}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             return Response({'error': f'Error verifying payment: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# class VendorViewSet(viewsets.ModelViewSet):
-#     queryset = Vendor.objects.all()
-#     serializer_class = VendorSerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def get_queryset(self):
-#         user = self.request.user
-#         if user.user_type == UserRole.VENDOR:
-#             return Vendor.objects.filter(user=user)
-#         return Vendor.objects.all()
