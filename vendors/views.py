@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from customers.models import UserRole
 from .models import Vendor
 from .serializers import VendorSerializer
-from payments.paystack import Paystack  # Assuming you have a Paystack helper file
+from payments.paystack import Paystack
 
 class VendorViewSet(viewsets.ModelViewSet):
     queryset = Vendor.objects.all()
